@@ -1,183 +1,147 @@
 // web/app.js
+(() => {
+  // Plateformes favorites FR : Netflix(8), Apple TV+(350), Prime(119), Canal+(381), HBO Max(1899), Paramount+(531)
+  const FAVORITES = [8, 350, 119, 381, 1899, 531];
 
-const FAVORITES = [
-  // IDs TMDB FR des plateformes favoris
-  8,      // Netflix
-  350,    // Apple TV+
-  337,    // Disney+
-  119,    // Amazon Prime Video
-  381,    // Canal+
-  531,    // Paramount+
-  1899    // HBO Max
-];
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
-const state = {
-  type: "movie",          // "movie" ou "tv"
-  genres: [],             // liste des genres
-  providers: [],          // liste FR
-  selectedGenre: "",      // id de genre
-  selectedProviders: new Set(FAVORITES), // par défaut: favoris cochés
-};
+  const providerCheckbox = (p) => `<label><input type="checkbox" value="${p.id}"> ${p.name}</label>`;
 
-const el = (sel) => document.querySelector(sel);
-const els = (sel) => Array.from(document.querySelectorAll(sel));
-
-// Init
-window.addEventListener("DOMContentLoaded", async () => {
-  await ensureHealth();
-  await loadProviders();
-  await loadGenres();
-  bindUI();
-  // Option: faire une première recherche auto si tu veux
-  // doSearch();
-});
-
-async function ensureHealth() {
-  try {
-    const res = await fetch("/api/health");
-    const data = await res.json();
-    el("#debugLine").textContent = `Région ${data.region} • Langue ${data.lang} • Token ${
-      data.token_present ? "OK" : "❌"
-    }`;
-  } catch (e) {
-    el("#debugLine").textContent = "Impossible de vérifier l'état du serveur.";
-  }
-}
-
-async function loadProviders() {
-  const res = await fetch("/api/providers");
-  const data = await res.json();
-  state.providers = data.providers || [];
-  renderProviders();
-}
-
-async function loadGenres() {
-  const res = await fetch(`/api/genres?type=${state.type}`);
-  const data = await res.json();
-  state.genres = data.genres || [];
-  renderGenres();
-}
-
-function bindUI() {
-  // Toggle type
-  els("#typeSeg button").forEach((b) =>
-    b.addEventListener("click", async () => {
-      els("#typeSeg button").forEach((x) => x.classList.remove("active"));
-      b.classList.add("active");
-      state.type = b.dataset.type === "tv" ? "tv" : "movie";
-      await loadGenres(); // recharge la liste de genres
-      // Optionnel: vider résultats
-      el("#results").innerHTML = "";
-    })
-  );
-
-  // Toggle + de plateformes
-  el("#toggleMore").addEventListener("click", () => {
-    const more = el("#otherProviders");
-    more.style.display = more.style.display === "none" ? "flex" : "none";
-    el("#toggleMore").textContent =
-      more.style.display === "none" ? "+ de plateformes" : "− masquer les plateformes";
-  });
-
-  // Bouton recherche
-  el("#searchBtn").addEventListener("click", doSearch);
-
-  // Sélecteur genre
-  el("#genreSelect").addEventListener("change", (e) => {
-    state.selectedGenre = e.target.value || "";
-  });
-}
-
-function renderGenres() {
-  const g = el("#genreSelect");
-  g.innerHTML = `<option value="">Tous les genres</option>` + state.genres
-    .map((x) => `<option value="${x.id}">${escapeHtml(x.name)}</option>`)
-    .join("");
-}
-
-function renderProviders() {
-  const favWrap = el("#favProviders");
-  const otherWrap = el("#otherProviders");
-  favWrap.innerHTML = "";
-  otherWrap.innerHTML = "";
-
-  const favs = [];
-  const others = [];
-  for (const p of state.providers) {
-    if (FAVORITES.includes(p.id)) favs.push(p);
-    else others.push(p);
-  }
-
-  const mkChip = (p) => {
-    const checked = state.selectedProviders.has(p.id) ? "checked" : "";
-    const logo = p.logo ? `<img src="${p.logo}" alt="">` : "";
-    return `
-      <label class="chip">
-        <input type="checkbox" data-id="${p.id}" ${checked} />
-        ${logo}<span>${escapeHtml(p.name)}</span>
-      </label>`;
-  };
-
-  favWrap.innerHTML = favs.map(mkChip).join("");
-  otherWrap.innerHTML = others.map(mkChip).join("");
-
-  // Bind checkboxes
-  els('.chip input[type="checkbox"]').forEach((inp) => {
-    inp.addEventListener("change", (e) => {
-      const id = Number(e.target.dataset.id);
-      if (e.target.checked) state.selectedProviders.add(id);
-      else state.selectedProviders.delete(id);
+  function setupMoreToggle() {
+    const btn = $("#toggleMore");
+    const wrap = $("#moreWrap");
+    wrap.style.display = "none";
+    btn.addEventListener("click", () => {
+      const open = wrap.style.display !== "none";
+      wrap.style.display = open ? "none" : "block";
+      btn.textContent = open ? "+ Afficher plus de plateformes" : "− Masquer les autres plateformes";
     });
-  });
-}
-
-async function doSearch() {
-  const providersCsv = Array.from(state.selectedProviders).join(",");
-  const params = new URLSearchParams();
-  params.set("type", state.type);
-  if (state.selectedGenre) params.set("with_genres", state.selectedGenre);
-  if (providersCsv) params.set("with_watch_providers", providersCsv);
-
-  const url = `/api/search?${params.toString()}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  renderResults(data.results || []);
-}
-
-function renderResults(items) {
-  const grid = el("#results");
-  if (!items.length) {
-    grid.innerHTML = `<div class="muted">Aucun résultat — essaie un autre genre ou ajoute des plateformes.</div>`;
-    return;
   }
-  grid.innerHTML = items
-    .map((r) => {
-      const img = r.poster || r.backdrop || "";
-      const title = escapeHtml(r.title || "Sans titre");
-      const rating = r.rating ? `<span class="badge">★ ${r.rating}</span>` : "";
-      const overview = r.overview ? escapeHtml(r.overview) : "—";
 
-      // 👉 On n'affiche PAS l'année/la date
-      return `
-        <article class="card">
-          ${img ? `<img src="${img}" alt="${title}">` : ""}
-          <div class="meta">
-            <div class="title">${title}</div>
-            <div class="desc">${overview}</div>
-            <div class="actions">
-              ${rating}
-            </div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
+  async function loadProviders() {
+    const favBox = $("#favProviders");
+    const moreBox = $("#moreProviders");
+    favBox.textContent = "Chargement…";
+    const res = await fetch("/api/providers");
+    const data = await res.json();
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+    const fav = data.providers.filter((p) => FAVORITES.includes(p.id));
+    const others = data.providers.filter((p) => !FAVORITES.includes(p.id));
+
+    favBox.innerHTML = fav.map(providerCheckbox).join("");
+    moreBox.innerHTML = others.map(providerCheckbox).join("");
+
+    // cocher les favorites par défaut
+    $$("#favProviders input[type=checkbox]").forEach((el) => (el.checked = true));
+  }
+
+  async function loadGenres() {
+    const type = $("input[name=type]:checked").value; // movie | tv
+    const res = await fetch(`/api/genres?type=${type}`);
+    const data = await res.json();
+    $("#genres").innerHTML =
+      `<option value="">Tous genres</option>` +
+      (data.genres || [])
+        .map((g) => `<option value="${g.id}">${g.name}</option>`)
+        .join("");
+  }
+
+  function selectedProvidersCSV() {
+    const ids = [
+      ...$$("#favProviders input:checked").map((x) => x.value),
+      ...$$("#moreProviders input:checked").map((x) => x.value),
+    ];
+    return ids.join("|");
+  }
+
+  async function search(page = 1) {
+    const type = $("input[name=type]:checked").value; // movie | tv
+    const genres = $("#genres").value || "";
+    const prov = selectedProvidersCSV();
+
+    const url =
+      `/api/search?type=${type}` +
+      `&page=${page}` +
+      `&with_genres=${encodeURIComponent(genres)}` +
+      `&with_watch_providers=${encodeURIComponent(prov)}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    renderList(data.results || []);
+  }
+
+  async function randomPick() {
+    // Respecte le type sélectionné + plateformes cochées
+    const type = $("input[name=type]:checked").value; // movie | tv
+    const prov = selectedProvidersCSV();
+    const url = `/api/random?type=${type}&with_watch_providers=${encodeURIComponent(prov)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data || !data.result) {
+      $("#results").innerHTML = "<p>Aucune suggestion trouvée. Essaie d'autres plateformes.</p>";
+      return;
+    }
+    renderList([data.result], { emphasize: true });
+  }
+
+  function renderList(list, opts = {}) {
+    const zone = $("#results");
+    if (!list || !list.length) {
+      zone.innerHTML = "<p>Aucun résultat</p>";
+      return;
+    }
+    zone.innerHTML = list
+      .map(
+        (r) => `
+      <article data-type="${r.type}" data-id="${r.id}">
+        <img src="${r.poster || ""}" alt="${r.title || ""}" loading="lazy">
+        <div class="body">
+          <div class="title">${r.title || ""}</div>
+          ${r.rating ? `<div class="badge" style="width:max-content">${r.rating} ★</div>` : ""}
+          <div class="desc">${r.overview ? r.overview : ""}</div>
+          <div class="prov" data-prov></div>
+        </div>
+      </article>`
+      )
+      .join("");
+
+    // Charger les providers FR par titre + lien cliquable
+    $$("#results article").forEach(async (card) => {
+      const type = card.dataset.type;
+      const id = card.dataset.id;
+      try {
+        const res = await fetch(`/api/providers/${type}/${id}`);
+        const p = await res.json();
+        const box = $("[data-prov]", card);
+        if (Array.isArray(p.flatrate) && p.flatrate.length) {
+          box.innerHTML = p.flatrate
+            .slice(0, 6)
+            .map((pv) => `<img src="${pv.logo}" title="${pv.name}" alt="${pv.name}">`)
+            .join("");
+        } else {
+          box.textContent = "Non dispo en abonnement";
+        }
+        const img = $("img", card);
+        if (p.link) {
+          img.style.cursor = "pointer";
+          img.addEventListener("click", () => window.open(p.link, "_blank"));
+        }
+      } catch {}
+    });
+
+    if (opts.emphasize) {
+      const first = $("#results article");
+      if (first) first.style.outline = "2px solid #7c5cff";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setupMoreToggle();
+    loadProviders();
+    loadGenres();
+    $$("#filters input[name=type]").forEach((el) => el.addEventListener("change", loadGenres));
+    $("#btnSearch").addEventListener("click", () => search(1));
+    $("#btnRandom").addEventListener("click", randomPick); // ✅ pas de parenthèse en trop
+  });
+})();

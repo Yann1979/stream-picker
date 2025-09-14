@@ -2,70 +2,89 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Stream Picker — FR</title>
+  <title>Stream Picker (FR)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/modern-css-reset/dist/reset.min.css"
-  />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0d12; color:#e9eef7; }
-    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
-    header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
-    h1 { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
-    .bar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-    .seg { background:#121826; border:1px solid #263043; border-radius:12px; padding:6px; display:flex; gap:6px; }
-    .seg button{ background:transparent; border:0; color:#9fb1d0; padding:8px 12px; border-radius:8px; cursor:pointer; }
-    .seg button.active{ background:#23304a; color:#fff; }
-    select, .btn {
-      background:#121826; border:1px solid #263043; color:#e9eef7; border-radius:10px; padding:10px 12px;
-    }
-    .btn.primary { background:#2563eb; border-color:#2563eb; }
-    .providers { margin:16px 0; }
-    .fav, .more { display:flex; flex-wrap:wrap; gap:10px; }
-    .chip { display:flex; align-items:center; gap:8px; border:1px solid #263043; background:#121826; padding:6px 10px; border-radius:999px; }
-    .chip input { accent-color:#2563eb; }
-    .chip img { width:20px; height:20px; border-radius:4px; background:#1e293b; }
-    .toggle-more { background:transparent; border:0; color:#9fb1d0; text-decoration:underline; cursor:pointer; margin:6px 0 0; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:16px; margin:16px 0 40px; }
-    .card { background:#0e1422; border:1px solid #1b2437; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
-    .card img { width:100%; aspect-ratio:2/3; object-fit:cover; background:#0a0f1a; }
-    .card .meta { padding:10px; display:flex; flex-direction:column; gap:8px; }
-    .title { font-weight:600; line-height:1.2; min-height:40px; }
-    .desc { color:#9fb1d0; font-size: 14px; max-height: 4.2em; overflow:hidden; }
-    .actions { display:flex; gap:8px; margin-top:auto; }
-    .badge { font-size:12px; color:#9fb1d0; }
-    .muted { color:#9fb1d0; }
+    :root { --bg:#0f1115; --card:#171a21; --ink:#e9ecf1; --muted:#a6adbb; --accent:#7c5cff; --accent2:#39cba6; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    header{padding:18px 20px;border-bottom:1px solid #222;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    h1{font-size:20px;margin:0 10px 0 0}
+    .badge{background:#222;padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    main{display:grid;grid-template-columns:320px 1fr;gap:18px;padding:18px}
+    @media (max-width: 980px){ main{grid-template-columns:1fr} }
+    .panel{background:var(--card);border:1px solid #232732;border-radius:14px;padding:16px}
+    .panel h3{margin:0 0 10px 0;font-size:16px}
+    .filters label{display:inline-flex;gap:8px;align-items:center;margin-right:10px;margin-bottom:8px}
+    .filters select{width:100%;margin-top:8px}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #2a2e39;background:#1b1f2a;color:var(--ink);cursor:pointer}
+    .btn-primary{background:var(--accent);border-color:var(--accent)}
+    .btn-ghost{background:#1b1f2a}
+    .btn-wide{width:100%}
+    .btn-hero{font-size:16px;padding:12px 14px;background:linear-gradient(90deg,var(--accent),var(--accent2));border:none}
+    .actions{position:sticky;top:8px;z-index:5;background:linear-gradient(180deg,var(--card),rgba(23,26,33,0.6));border:1px solid #232732;padding:10px;border-radius:12px;margin-bottom:12px}
+    .actions .row{display:flex;gap:8px}
+    .section-title{margin:12px 0 6px;font-size:13px;color:var(--muted)}
+    #favProviders label,#moreProviders label{display:block;padding:6px 8px;border-radius:8px;border:1px solid #2a2e39;background:#121621;margin-bottom:6px}
+    #toggleMore{margin-top:6px}
+    #results{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+    article{background:var(--card);border:1px solid #232732;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+    article img{width:100%;aspect-ratio:2/3;object-fit:cover;cursor:pointer}
+    article .body{padding:10px;display:flex;flex-direction:column;gap:8px}
+    .title{font-weight:600;font-size:14px}
+    .desc{color:var(--muted);font-size:13px;max-height:4.2em;overflow:hidden}
+    .prov{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    .prov img{width:22px;height:22px;border-radius:4px;background:#111;border:1px solid #2a2e39}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Stream Picker</h1>
-      <div class="bar">
-        <div class="seg" id="typeSeg">
-          <button data-type="movie" class="active">Films</button>
-          <button data-type="tv">Séries</button>
+  <header>
+    <h1>Stream Picker</h1>
+    <span class="badge">Catalogue France (FR)</span>
+    <span class="badge">Langue par défaut : fr-FR</span>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <!-- Barre d'actions collante -->
+      <div class="actions">
+        <div class="row" style="margin-bottom:8px">
+          <button id="btnSearch" class="btn btn-primary btn-wide">Rechercher</button>
         </div>
-        <select id="genreSelect">
-          <option value="">Tous les genres</option>
-        </select>
-        <button id="searchBtn" class="btn primary">Trouve-moi quelque chose</button>
+        <div class="row">
+          <button id="btnRandom" class="btn btn-hero btn-wide">🎲 Surprends-moi</button>
+        </div>
       </div>
-    </header>
 
-    <section class="providers">
-      <div class="muted" style="margin-bottom:6px;">Plateformes (FR)</div>
-      <div class="fav" id="favProviders"></div>
-      <button class="toggle-more" id="toggleMore">+ de plateformes</button>
-      <div class="more" id="otherProviders" style="display:none;"></div>
+      <div id="filters" class="filters">
+        <h3>Filtres</h3>
+
+        <div style="margin-bottom:10px">
+          <label><input type="radio" name="type" value="movie" checked> Film</label>
+          <label><input type="radio" name="type" value="tv"> Série</label>
+        </div>
+
+        <label for="genres">Genre</label>
+        <select id="genres"></select>
+
+        <div class="section-title">Plateformes favorites</div>
+        <div id="favProviders">Chargement…</div>
+
+        <button id="toggleMore" class="btn btn-ghost btn-wide">+ Afficher plus de plateformes</button>
+
+        <div id="moreWrap" style="display:none;margin-top:8px">
+          <div class="section-title">Autres plateformes</div>
+          <div id="moreProviders"></div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <h3>Résultats</h3>
+      <div id="results"></div>
     </section>
+  </main>
 
-    <div class="muted" id="debugLine"></div>
-
-    <section class="grid" id="results"></section>
-  </div>
-
-  <script src="./app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
