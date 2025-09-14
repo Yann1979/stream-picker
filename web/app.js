@@ -1,4 +1,4 @@
-// web/app.js — Favoris fixes + alias (Prime, Disney réapparaissent), gestion des erreurs recherche
+// web/app.js — Auto-cocher favoris par défaut, alias, messages d'erreur, openWatch
 
 const $ = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
@@ -7,9 +7,9 @@ const form = $("#prefsForm");
 const grid = $("#resultsGrid");
 const emptyMsg = $("#emptyMsg");
 const providersChips = $("#providersChips");
-const errorBar = $("#errorBar"); // ajoute une div#errorBar dans ton HTML si pas présent
+const errorBar = $("#errorBar");
 
-const LS_KEY = "tmut:prefs:v5";
+const LS_KEY = "tmut:prefs:v6";
 const LS_FAV = "tmut:favorites";
 const LS_SEEN = "tmut:seen";
 
@@ -63,16 +63,12 @@ async function loadProvidersUI() {
     const data = await res.json();
     ALL_PROVIDERS = (data.providers || []).map(p => ({...p, cname: canon(p.name)}));
 
-    // split favoris / autres (sur le nom canonique)
     const favsArr = [];
     const others = [];
     for (const p of ALL_PROVIDERS) {
       (FAVORITES_SET.has(p.cname) ? favsArr : others).push(p);
     }
-
-    // ordre exact des favoris
     favsArr.sort((a,b)=> FAVORITES.indexOf(a.cname) - FAVORITES.indexOf(b.cname));
-    // ordre alpha pour le reste
     others.sort((a,b)=> a.name.localeCompare(b.name,'fr'));
 
     const renderChip = (p)=>`
@@ -93,12 +89,20 @@ async function loadProvidersUI() {
       </details>
     `;
 
-    // ré-appliquer préférences
+    // Si aucune préférence existante, cocher par défaut tous les favoris et sauvegarder
     const saved = getSavedPrefs();
-    if (saved?.providers?.length) {
-      document.querySelectorAll(".chip input[name='providers']").forEach(inp => {
-        inp.checked = saved.providers.includes(inp.value);
+    const hasSavedProviders = Array.isArray(saved?.providers) && saved.providers.length > 0;
+
+    const inputs = document.querySelectorAll(".chip input[name='providers']");
+    if (!hasSavedProviders) {
+      inputs.forEach(inp => {
+        const cname = canon(inp.value);
+        if (FAVORITES_SET.has(cname)) inp.checked = true;
       });
+      const p = getPrefs();
+      savePrefs(p);
+    } else {
+      inputs.forEach(inp => { inp.checked = saved.providers.includes(inp.value); });
     }
   } catch (err) {
     console.error("loadProvidersUI error:", err);
@@ -113,7 +117,7 @@ function getSavedPrefs(){
 function getPrefs() {
   const providers = $$(".chip input[name='providers']:checked").map(i=>i.value);
   const genres = $$(".chip input[name='genres']:checked").map(i=>i.value);
-  const type = form?.elements?.['type']?.value || 'film'; // défaut
+  const type = form?.elements?.['type']?.value || 'film';
   const mood = form?.elements?.['mood']?.value || 'populaire';
   const duration = form?.elements?.['duration']?.value || '';
   const olang = form?.elements?.['olang']?.value || "any";

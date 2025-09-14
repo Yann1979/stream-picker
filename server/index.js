@@ -1,4 +1,4 @@
-// server/index.js — FR-only, robuste, recherche qui retombe en "sans filtres" si providers absents/vides
+// server/index.js — FR-only, robust search, no-cache static for fresh front
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -13,7 +13,17 @@ const app = express();
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'web')));
+
+// Désactive le cache des assets front pour éviter qu’un ancien app.js reste servi
+app.use(express.static(path.join(__dirname, '..', 'web'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
 
 const TMDB_TOKEN = process.env.TMDB_BEARER_TOKEN || '';
 const WATCH_REGION = (process.env.WATCH_REGION || 'FR').toUpperCase();
@@ -44,13 +54,12 @@ const TMDB = {
   }
 };
 
-// ---------- Providers FR séparés par type (évite bugs Apple TV+) ----------
+// ---------- Providers FR (movie et tv) ----------
 let MOVIE_PROVIDERS_BY_NAME = new Map();
 let TV_PROVIDERS_BY_NAME = new Map();
 let PROVIDERS_CACHE = null;
 
 async function loadProvidersFR() {
-  // Si pas de token, renvoyer une liste vide mais ne pas planter
   if (!TMDB_TOKEN) {
     MOVIE_PROVIDERS_BY_NAME = new Map();
     TV_PROVIDERS_BY_NAME = new Map();
@@ -96,11 +105,9 @@ async function loadProvidersFR() {
 
 async function ensureProviders() {
   if (!PROVIDERS_CACHE) {
-    try {
-      await loadProvidersFR();
-    } catch (e) {
+    try { await loadProvidersFR(); }
+    catch (e) {
       console.error('loadProvidersFR failed:', e.message);
-      // Ne bloque pas la recherche : renvoie vide
       MOVIE_PROVIDERS_BY_NAME = new Map();
       TV_PROVIDERS_BY_NAME = new Map();
       PROVIDERS_CACHE = { region: WATCH_REGION, providers: [] };
@@ -108,25 +115,15 @@ async function ensureProviders() {
   }
 }
 
-// Health + debug
+// Health
 app.get('/api/health', async (req,res)=>{
-  res.json({
-    ok: true,
-    region: WATCH_REGION,
-    lang: LANG,
-    token_present: Boolean(TMDB_TOKEN)
-  });
+  res.json({ ok: true, region: WATCH_REGION, lang: LANG, token_present: Boolean(TMDB_TOKEN) });
 });
 
 // Liste pour l’UI
 app.get('/api/providers-list', async (req, res) => {
-  try {
-    await ensureProviders();
-    res.json(PROVIDERS_CACHE);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'providers_list_failed' });
-  }
+  try { await ensureProviders(); res.json(PROVIDERS_CACHE); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'providers_list_failed' }); }
 });
 
 // Providers d’un titre (FR-only)
@@ -152,7 +149,7 @@ app.get('/api/providers/:type/:id', async (req, res) => {
   }
 });
 
-// Discover FR-only (robuste si providers vides -> pas de filtre providers)
+// Discover FR-only
 function mapPoster(p){ return p ? `${IMG_BASE}w342${p}` : null; }
 function mapBackdrop(p){ return p ? `${IMG_BASE}w780${p}` : null; }
 
@@ -171,7 +168,7 @@ function buildDiscoverParams(type, q) {
     with_watch_monetization_types: 'flatrate'
   };
 
-  // providers => UNIQUEMENT les IDs FR du type demandé
+  // Filtre providers: uniquement les IDs FR du type demandé
   const namesRaw = (q.providers || '').trim();
   if (namesRaw) {
     const byName = providerMapForType(type);
@@ -220,7 +217,6 @@ app.get('/api/search', async (req, res) => {
     const type = (req.query.type === 'série' || req.query.type === 'tv') ? 'tv' : 'movie';
     const params = buildDiscoverParams(type, req.query);
 
-    // Si token manquant -> renvoyer message clair
     if (!TMDB_TOKEN) {
       return res.status(500).json({ error: 'missing_token', message: 'TMDB_BEARER_TOKEN manquant côté serveur.' });
     }
