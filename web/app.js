@@ -1,4 +1,4 @@
-// web/app.js — Favoris plateformes + FR-only client, recherche stable
+// web/app.js — Favoris fixes + alias (Prime, Disney réapparaissent), gestion des erreurs recherche
 
 const $ = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
@@ -7,8 +7,9 @@ const form = $("#prefsForm");
 const grid = $("#resultsGrid");
 const emptyMsg = $("#emptyMsg");
 const providersChips = $("#providersChips");
+const errorBar = $("#errorBar"); // ajoute une div#errorBar dans ton HTML si pas présent
 
-const LS_KEY = "tmut:prefs:v4";
+const LS_KEY = "tmut:prefs:v5";
 const LS_FAV = "tmut:favorites";
 const LS_SEEN = "tmut:seen";
 
@@ -17,26 +18,41 @@ function saveSet(key, set){ localStorage.setItem(key, JSON.stringify(Array.from(
 const favs = loadSet(LS_FAV);
 const seen = loadSet(LS_SEEN);
 
-// ---------------- Providers dynamiques (FR) ----------------
-let ALL_PROVIDERS = []; // {name, ids[], logo}
+// ---------- Aliases & favoris ----------
+const ALIASES = {
+  "Amazon Prime Video": "Prime Video",
+  "Prime Video": "Prime Video",
+  "Disney Plus": "Disney+",
+  "Disney+": "Disney+",
+  "HBO Max": "HBO Max",
+  "Max": "HBO Max",
+  "Apple TV Plus": "Apple TV+",
+  "Apple TV+": "Apple TV+",
+  "Canal": "Canal+",
+  "Canal+": "Canal+",
+  "Paramount Plus": "Paramount+",
+  "Paramount+": "Paramount+",
+  "Netflix": "Netflix"
+};
 
-/** Ordre exact demandé en favoris (affichés en premier) */
-const POPULAR_ORDER = [
+const FAVORITES = [
   "Netflix",
   "Apple TV+",
   "Disney+",
   "Prime Video",
   "Canal+",
   "Paramount+",
-  "HBO Max" // on affichera aussi "Max" si présent dans la liste (voir plus bas)
+  "HBO Max"
 ];
+const FAVORITES_SET = new Set(FAVORITES);
 
-/** Certains catalogues renvoient "Max" au lieu de "HBO Max" */
-function isPopularName(name) {
-  if (!name) return false;
-  if (name === "Max") return true; // traiter comme HBO
-  return POPULAR_ORDER.includes(name);
+function canon(name){
+  if (!name) return "";
+  return ALIASES[name] || name;
 }
+
+// ---------- Providers dynamiques ----------
+let ALL_PROVIDERS = []; // {name, ids[], logo}
 
 async function loadProvidersUI() {
   if (!providersChips) return;
@@ -45,24 +61,18 @@ async function loadProvidersUI() {
     const res = await fetch('/api/providers-list');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    ALL_PROVIDERS = data.providers || [];
-    if (!ALL_PROVIDERS.length) throw new Error("Aucune plateforme reçue");
+    ALL_PROVIDERS = (data.providers || []).map(p => ({...p, cname: canon(p.name)}));
 
-    // Sépare favoris vs autres
-    const popular = [];
+    // split favoris / autres (sur le nom canonique)
+    const favsArr = [];
     const others = [];
     for (const p of ALL_PROVIDERS) {
-      (isPopularName(p.name) ? popular : others).push(p);
+      (FAVORITES_SET.has(p.cname) ? favsArr : others).push(p);
     }
 
-    // Trie les favoris selon POPULAR_ORDER exact
-    popular.sort((a,b)=>{
-      const ia = POPULAR_ORDER.indexOf(a.name === "Max" ? "HBO Max" : a.name);
-      const ib = POPULAR_ORDER.indexOf(b.name === "Max" ? "HBO Max" : b.name);
-      return ia - ib;
-    });
-
-    // Trie alphabétique pour le reste
+    // ordre exact des favoris
+    favsArr.sort((a,b)=> FAVORITES.indexOf(a.cname) - FAVORITES.indexOf(b.cname));
+    // ordre alpha pour le reste
     others.sort((a,b)=> a.name.localeCompare(b.name,'fr'));
 
     const renderChip = (p)=>`
@@ -73,7 +83,7 @@ async function loadProvidersUI() {
 
     providersChips.innerHTML = `
       <div class="fav-providers" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
-        ${popular.map(renderChip).join("")}
+        ${favsArr.map(renderChip).join("")}
       </div>
       <details>
         <summary class="chip" style="list-style:none;display:inline-flex;cursor:pointer">Autres plateformes</summary>
@@ -83,7 +93,7 @@ async function loadProvidersUI() {
       </details>
     `;
 
-    // Ré-applique les préférences sauvegardées
+    // ré-appliquer préférences
     const saved = getSavedPrefs();
     if (saved?.providers?.length) {
       document.querySelectorAll(".chip input[name='providers']").forEach(inp => {
@@ -96,38 +106,37 @@ async function loadProvidersUI() {
   }
 }
 
-// ---------------- Préférences ----------------
+// ---------- Préférences ----------
 function getSavedPrefs(){
   try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; }
 }
 function getPrefs() {
   const providers = $$(".chip input[name='providers']:checked").map(i=>i.value);
   const genres = $$(".chip input[name='genres']:checked").map(i=>i.value);
-  const type = form.elements['type'].value;
-  const mood = form.elements['mood'].value;
-  const duration = form.elements['duration'].value;
-  const olang = form.elements['olang']?.value || "any";
-  const year_from = form.elements['year_from']?.value || "";
-  const year_to = form.elements['year_to']?.value || "";
+  const type = form?.elements?.['type']?.value || 'film'; // défaut
+  const mood = form?.elements?.['mood']?.value || 'populaire';
+  const duration = form?.elements?.['duration']?.value || '';
+  const olang = form?.elements?.['olang']?.value || "any";
+  const year_from = form?.elements?.['year_from']?.value || "";
+  const year_to = form?.elements?.['year_to']?.value || "";
   return { providers, type, genres, mood, duration, olang, year_from, year_to };
 }
 function savePrefs(p){ localStorage.setItem(LS_KEY, JSON.stringify(p)); }
 function loadPrefs(){
   const p = getSavedPrefs();
   if (!p) return;
-  if (p.type) $(`.chip input[name='type'][value="${p.type}"]`)?.click();
   $$(".chip input[name='genres']").forEach(inp => inp.checked = p.genres?.includes(inp.value) || false);
-  if (p.mood) form.elements['mood'].value = p.mood;
-  if (p.duration) form.elements['duration'].value = p.duration;
-  if (p.olang) form.elements['olang'].value = p.olang;
-  if (p.year_from) form.elements['year_from'].value = p.year_from;
-  if (p.year_to) form.elements['year_to'].value = p.year_to;
+  if (form?.elements?.['type'] && p.type) form.elements['type'].value = p.type;
+  if (form?.elements?.['mood'] && p.mood) form.elements['mood'].value = p.mood;
+  if (form?.elements?.['duration'] && p.duration) form.elements['duration'].value = p.duration;
+  if (form?.elements?.['olang'] && p.olang) form.elements['olang'].value = p.olang;
+  if (form?.elements?.['year_from'] && p.year_from) form.elements['year_from'].value = p.year_from;
+  if (form?.elements?.['year_to'] && p.year_to) form.elements['year_to'].value = p.year_to;
 }
 
-// ---------------- Cache providers par titre ----------------
-const providersCache = new Map(); // key: `${type}-${id}` -> {flatrate, buy, rent, link}
+// ---------- Cache providers par titre ----------
+const providersCache = new Map();
 
-// ---------------- Deep-links (meilleur effort) ----------------
 function providerDeepLink(name, title) {
   const q = encodeURIComponent(title);
   const n = (name || "").toLowerCase();
@@ -138,11 +147,20 @@ function providerDeepLink(name, title) {
   if (n.includes('paramount')) return `https://www.paramountplus.com/search/?q=${q}`;
   if (n.includes('apple'))     return `https://tv.apple.com/fr/search?term=${q}`;
   if (n === 'max' || n.includes('hbo')) return `https://play.max.com/search?q=${q}`;
-  if (n.includes('ocs'))       return `https://www.ocs.fr/recherche?q=${q}`;
   return null;
 }
 
-// ---------------- Rendu des résultats ----------------
+function showError(msg) {
+  if (!errorBar) { console.error(msg); return; }
+  errorBar.textContent = msg;
+  errorBar.hidden = false;
+}
+function clearError() {
+  if (!errorBar) return;
+  errorBar.textContent = '';
+  errorBar.hidden = true;
+}
+
 function render(results) {
   grid.innerHTML = "";
   if (!results.length) { emptyMsg.hidden = false; return; }
@@ -170,7 +188,6 @@ function render(results) {
     grid.appendChild(el);
   }
 
-  // Favoris
   $$(".fav-btn", grid).forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.id;
@@ -180,7 +197,6 @@ function render(results) {
       btn.textContent = btn.classList.contains("active") ? "★ Favori" : "☆ Favori";
     });
   });
-  // Déjà vu
   $$(".seen-btn", grid).forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.id;
@@ -190,11 +206,9 @@ function render(results) {
       btn.textContent = btn.classList.contains("active") ? "✔ Déjà vu" : "Marquer vu";
     });
   });
-  // Afficher plateformes
   $$(".show-providers", grid).forEach(btn => {
     btn.addEventListener("click", () => showProviders(btn.dataset.type, btn.dataset.id, btn.closest(".card")));
   });
-  // Regarder : image / titre / bouton / poster
   $$(".open-watch", grid).forEach(el => {
     el.addEventListener("click", () => openWatch(el.dataset.type, el.dataset.id, el.dataset.title));
   });
@@ -204,6 +218,7 @@ async function fetchProviders(type, id) {
   const key = `${type}-${id}`;
   if (providersCache.has(key)) return providersCache.get(key);
   const res = await fetch(`/api/providers/${encodeURIComponent(type)}/${id}`);
+  if (!res.ok) throw new Error(`Providers HTTP ${res.status}`);
   const data = await res.json();
   providersCache.set(key, data);
   return data;
@@ -223,26 +238,21 @@ async function showProviders(type, id, cardEl) {
         `<span class="badge">${p.logo ? `<img src="${p.logo}" alt="" width="18" height="18">` : ""}${p.name}</span>`
       ).join("");
     }
-  } catch {
+  } catch (e) {
     container.innerHTML = `<span class="badge">Erreur de chargement</span>`;
   }
   container.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 
-// Ouvrir la meilleure page de lecture (meilleur effort)
 async function openWatch(type, id, title) {
   try {
     const data = await fetchProviders(type, id);
     const flat = data.flatrate || [];
-    // priorité : si on a des plateformes en abonnement, utilise la 1ère
     if (flat.length) {
-      const first = flat[0];
-      const link = providerDeepLink(first.name, title);
+      const link = providerDeepLink(flat[0].name, title);
       if (link) { window.open(link, "_blank"); return; }
     }
-    // fallback : page TMDB "watch"
     if (data.link) { window.open(data.link, "_blank"); return; }
-    // dernier recours : recherche web
     const q = encodeURIComponent(`${title} streaming`);
     window.open(`https://www.google.com/search?q=${q}`, "_blank");
   } catch {
@@ -258,26 +268,35 @@ function savePrefsAndQuery(overrides) {
 }
 
 async function query(prefsOverride) {
+  clearError();
   const p = prefsOverride || getPrefs();
   const qs = new URLSearchParams();
   qs.set("type", p.type);
   if (p.providers?.length) qs.set("providers", p.providers.join(","));
   if (p.genres?.length) qs.set("genres", p.genres.join(","));
-  qs.set("mood", p.mood);
-  qs.set("duration", p.duration);
+  if (p.mood) qs.set("mood", p.mood);
+  if (p.duration) qs.set("duration", p.duration);
   if (p.olang && p.olang !== "any") qs.set("original_language", p.olang);
   if (p.year_from) qs.set("year_from", p.year_from);
   if (p.year_to) qs.set("year_to", p.year_to);
 
-  const res = await fetch(`/api/search?${qs.toString()}`);
-  const data = await res.json();
-  render(data.results || []);
-
-  // Astuce debug bouton : garder en mémoire les params utilisés
-  window.__lastQueryDebug = data.debug || null;
+  try {
+    const res = await fetch(`/api/search?${qs.toString()}`);
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data?.message || "Recherche indisponible (serveur).");
+      render([]);
+      return;
+    }
+    render(data.results || []);
+    window.__lastQueryDebug = data.debug || null;
+  } catch (e) {
+    showError("Impossible d’atteindre le serveur.");
+    render([]);
+  }
 }
 
-// Boutons rapides "J'ai X min"
+// "J'ai X minutes"
 document.addEventListener("click", (e) => {
   const b = e.target.closest(".chip--btn");
   if (!b) return;
@@ -288,7 +307,6 @@ document.addEventListener("click", (e) => {
   savePrefsAndQuery();
 });
 
-// Shuffle visuel
 $("#shuffleBtn")?.addEventListener("click", async () => {
   await savePrefsAndQuery();
   const cards = $$(".card", grid);
@@ -300,22 +318,19 @@ $("#shuffleBtn")?.addEventListener("click", async () => {
   }
 });
 
-// --------- INIT ---------
 (function init(){
-  // année footer
   const y = new Date().getFullYear();
   const span = document.querySelector("#year");
   if (span) span.textContent = y;
 
-  // Charger plateformes -> appliquer prefs -> 1ère recherche
   loadProvidersUI()
     .then(() => { loadPrefs(); return query(); })
     .catch(() => { loadPrefs(); return query(); });
 
-  form.addEventListener("submit", (e)=>{ e.preventDefault(); savePrefsAndQuery(); });
+  form?.addEventListener("submit", (e)=>{ e.preventDefault(); savePrefsAndQuery(); });
   $("#resetBtn")?.addEventListener("click", ()=>{ 
     localStorage.removeItem(LS_KEY); 
-    form.reset(); 
+    form?.reset(); 
     $$(".chip input:checked").forEach(i=>i.checked=false); 
     query(); 
   });

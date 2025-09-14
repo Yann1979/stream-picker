@@ -1,4 +1,4 @@
-// server/index.js — FR-only + providers par type (fix Apple TV+ sur discover movie/tv)
+// server/index.js — FR-only, robuste, recherche qui retombe en "sans filtres" si providers absents/vides
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -15,13 +15,13 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'web')));
 
-const TMDB_TOKEN = process.env.TMDB_BEARER_TOKEN;
+const TMDB_TOKEN = process.env.TMDB_BEARER_TOKEN || '';
 const WATCH_REGION = (process.env.WATCH_REGION || 'FR').toUpperCase();
 const LANG = process.env.LANG || 'fr-FR';
 const IMG_BASE = 'https://image.tmdb.org/t/p/';
 
 if (!TMDB_TOKEN) {
-  console.error('❌ TMDB_BEARER_TOKEN manquant dans .env');
+  console.error('❌ TMDB_BEARER_TOKEN manquant dans .env — les appels TMDB échoueront.');
 }
 
 const TMDB = {
@@ -36,17 +36,27 @@ const TMDB = {
         'Accept': 'application/json'
       }
     });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText} on ${url}`);
+    if (!res.ok) {
+      const text = await res.text().catch(()=> '');
+      throw new Error(`${res.status} ${res.statusText} on ${url}\n${text}`);
+    }
     return res.json();
   }
 };
 
-// ---------- Providers FR, séparés par type ----------
-let MOVIE_PROVIDERS_BY_NAME = new Map(); // name -> { ids:[...], logo }
-let TV_PROVIDERS_BY_NAME    = new Map();
-let PROVIDERS_CACHE = null; // pour /api/providers-list (agrégé)
+// ---------- Providers FR séparés par type (évite bugs Apple TV+) ----------
+let MOVIE_PROVIDERS_BY_NAME = new Map();
+let TV_PROVIDERS_BY_NAME = new Map();
+let PROVIDERS_CACHE = null;
 
 async function loadProvidersFR() {
+  // Si pas de token, renvoyer une liste vide mais ne pas planter
+  if (!TMDB_TOKEN) {
+    MOVIE_PROVIDERS_BY_NAME = new Map();
+    TV_PROVIDERS_BY_NAME = new Map();
+    PROVIDERS_CACHE = { region: WATCH_REGION, providers: [] };
+    return;
+  }
   const [movie, tv] = await Promise.all([
     TMDB.get('/watch/providers/movie', { language: LANG, watch_region: WATCH_REGION }),
     TMDB.get('/watch/providers/tv',    { language: LANG, watch_region: WATCH_REGION })
@@ -69,7 +79,7 @@ async function loadProvidersFR() {
   MOVIE_PROVIDERS_BY_NAME = toMap(movie);
   TV_PROVIDERS_BY_NAME    = toMap(tv);
 
-  // Pour l’UI : on fusionne proprement (movie ∪ tv) pour afficher la liste FR
+  // union pour l’UI
   const union = new Map();
   for (const m of MOVIE_PROVIDERS_BY_NAME.values()) union.set(m.name, { name:m.name, ids:[...m.ids], logo:m.logo });
   for (const t of TV_PROVIDERS_BY_NAME.values()) {
@@ -80,16 +90,35 @@ async function loadProvidersFR() {
       if (!u.logo && t.logo) u.logo = t.logo;
     }
   }
-
   const providers = Array.from(union.values()).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
   PROVIDERS_CACHE = { region: WATCH_REGION, providers };
 }
 
 async function ensureProviders() {
-  if (!PROVIDERS_CACHE) await loadProvidersFR();
+  if (!PROVIDERS_CACHE) {
+    try {
+      await loadProvidersFR();
+    } catch (e) {
+      console.error('loadProvidersFR failed:', e.message);
+      // Ne bloque pas la recherche : renvoie vide
+      MOVIE_PROVIDERS_BY_NAME = new Map();
+      TV_PROVIDERS_BY_NAME = new Map();
+      PROVIDERS_CACHE = { region: WATCH_REGION, providers: [] };
+    }
+  }
 }
 
-// UI : liste des plateformes FR
+// Health + debug
+app.get('/api/health', async (req,res)=>{
+  res.json({
+    ok: true,
+    region: WATCH_REGION,
+    lang: LANG,
+    token_present: Boolean(TMDB_TOKEN)
+  });
+});
+
+// Liste pour l’UI
 app.get('/api/providers-list', async (req, res) => {
   try {
     await ensureProviders();
@@ -100,9 +129,9 @@ app.get('/api/providers-list', async (req, res) => {
   }
 });
 
-// Providers par titre (FR-only)
+// Providers d’un titre (FR-only)
 app.get('/api/providers/:type/:id', async (req, res) => {
-  const { type, id } = req.params; // movie | tv
+  const { type, id } = req.params;
   try {
     const data = await TMDB.get(`/${type}/${id}/watch/providers`);
     const fr = data.results?.[WATCH_REGION] || null;
@@ -123,11 +152,11 @@ app.get('/api/providers/:type/:id', async (req, res) => {
   }
 });
 
-// Discover FR-only
+// Discover FR-only (robuste si providers vides -> pas de filtre providers)
 function mapPoster(p){ return p ? `${IMG_BASE}w342${p}` : null; }
 function mapBackdrop(p){ return p ? `${IMG_BASE}w780${p}` : null; }
 
-function pickProviderMapForType(type) {
+function providerMapForType(type){
   return type === 'movie' ? MOVIE_PROVIDERS_BY_NAME : TV_PROVIDERS_BY_NAME;
 }
 
@@ -139,41 +168,34 @@ function buildDiscoverParams(type, q) {
     sort_by: 'popularity.desc',
     page: q.page || '1',
     watch_region: WATCH_REGION,
-    with_watch_monetization_types: 'flatrate' // uniquement catalogue abo FR
+    with_watch_monetization_types: 'flatrate'
   };
 
-  // providers => utilise UNIQUEMENT les IDs FR du type demandé (fix Apple TV+)
-  if (q.providers) {
-    const byName = pickProviderMapForType(type);
-    const names = q.providers.split(',').map(s=>s.trim()).filter(Boolean);
+  // providers => UNIQUEMENT les IDs FR du type demandé
+  const namesRaw = (q.providers || '').trim();
+  if (namesRaw) {
+    const byName = providerMapForType(type);
+    const names = namesRaw.split(',').map(s=>s.trim()).filter(Boolean);
     const ids = [];
     for (const name of names) {
       const entry = byName.get(name);
       if (entry?.ids?.length) ids.push(...entry.ids);
     }
-    if (ids.length) {
-      // OR logique entre providers
-      params.with_watch_providers = ids.join('|');
-    }
+    if (ids.length) params.with_watch_providers = ids.join('|');
   }
 
-  // langue originale
   if (q.original_language && q.original_language !== 'any') {
     params.with_original_language = q.original_language;
   }
-
-  // bornes années
   if (q.year_from) params[isMovie ? 'primary_release_date.gte' : 'first_air_date.gte'] = `${q.year_from}-01-01`;
   if (q.year_to)   params[isMovie ? 'primary_release_date.lte' : 'first_air_date.lte'] = `${q.year_to}-12-31`;
 
-  // durée (films)
   if (q.duration && isMovie) {
     if (q.duration === 'court') params['with_runtime.lte'] = '60';
     if (q.duration === 'moyen') { params['with_runtime.gte'] = '60'; params['with_runtime.lte'] = '120'; }
     if (q.duration === 'long')  params['with_runtime.gte'] = '120';
   }
 
-  // genres pass-through (si tu passes des ids)
   if (q.genres) params.with_genres = q.genres;
 
   return params;
@@ -194,24 +216,26 @@ function mapResult(type, item) {
 
 app.get('/api/search', async (req, res) => {
   try {
-    await ensureProviders(); // garantit les maps FR par type
+    await ensureProviders();
     const type = (req.query.type === 'série' || req.query.type === 'tv') ? 'tv' : 'movie';
     const params = buildDiscoverParams(type, req.query);
-    const data = await TMDB.get(`/discover/${type}`, params);
 
+    // Si token manquant -> renvoyer message clair
+    if (!TMDB_TOKEN) {
+      return res.status(500).json({ error: 'missing_token', message: 'TMDB_BEARER_TOKEN manquant côté serveur.' });
+    }
+
+    const data = await TMDB.get(`/discover/${type}`, params);
     res.json({
       region: WATCH_REGION,
       results: (data.results || []).map(it => mapResult(type, it)),
       page: data.page,
       total_pages: data.total_pages,
-      debug: {
-        type,
-        params // utile pour vérifier les IDs Apple TV+ (350) envoyés
-      }
+      debug: { type, params }
     });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'search_failed' });
+    console.error('search_failed:', e.message);
+    res.status(500).json({ error: 'search_failed', message: e.message });
   }
 });
 
@@ -222,5 +246,5 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT} (FR-only, providers par type)`);
+  console.log(`✅ Server running http://localhost:${PORT} — FR-only, robust search`);
 });
