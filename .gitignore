@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+server/index.backup.*
+web/app.backup.*
+web/*.map
+web/*.tmp
+*.tmp
+Thumbs.db
