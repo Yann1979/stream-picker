@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trouve-Moi Un Truc 🎬</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Trouve-Moi Un Truc 🎬</h1>
+  </header>
+
+  <main>
+    <form id="prefsForm">
+      <label>
+        Type :
+        <select name="type">
+          <option value="film">Film</option>
+          <option value="série">Série</option>
+          <option value="any" selected>Peu importe</option>
+        </select>
+      </label>
+      <button type="submit">Rechercher</button>
+    </form>
+
+    <section id="results"></section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

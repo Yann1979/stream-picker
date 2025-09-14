@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trouve-Moi Un Truc 🎬</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a class="logo" href="#"><span class="logo__dot"></span> Trouve-Moi Un Truc</a>
+      <nav class="nav">
+        <button id="themeToggle" class="btn btn--ghost" type="button">🌓</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="intro">
+      <h1>Que regarder ce soir ?</h1>
+      <p>Plateformes, genres, humeur, durée… Résultats disponibles en France.</p>
+    </section>
+
+    <section class="panel">
+      <form id="prefsForm" class="prefs" aria-describedby="prefsHelp">
+
+        <!-- Plateformes dynamiques (chargées via /api/providers-list) -->
+        <div class="prefs__group" id="providersBlock">
+          <h2 class="prefs__title">Plateformes</h2>
+          <div class="chips" id="providersChips" role="group">
+            <span class="muted">Chargement des plateformes…</span>
+          </div>
+        </div>
+
+        <div class="prefs__group">
+          <h2 class="prefs__title">Type</h2>
+          <div class="chips" role="group">
+            <label class="chip"><input type="radio" name="type" value="film" checked>Film</label>
+            <label class="chip"><input type="radio" name="type" value="série">Série</label>
+            <label class="chip"><input type="radio" name="type" value="any">Peu importe</label>
+          </div>
+        </div>
+
+        <div class="prefs__group">
+          <h2 class="prefs__title">Genres</h2>
+          <div class="chips" role="group">
+            <label class="chip"><input type="checkbox" name="genres" value="action">Action</label>
+            <label class="chip"><input type="checkbox" name="genres" value="comédie">Comédie</label>
+            <label class="chip"><input type="checkbox" name="genres" value="drame">Drame</label>
+            <label class="chip"><input type="checkbox" name="genres" value="science-fiction">Science-fiction</label>
+            <label class="chip"><input type="checkbox" name="genres" value="fantastique">Fantastique</label>
+            <label class="chip"><input type="checkbox" name="genres" value="animation">Animation</label>
+            <label class="chip"><input type="checkbox" name="genres" value="crime">Crime</label>
+            <label class="chip"><input type="checkbox" name="genres" value="historique">Historique</label>
+            <label class="chip"><input type="checkbox" name="genres" value="famille">Famille</label>
+            <label class="chip"><input type="checkbox" name="genres" value="aventure">Aventure</label>
+            <label class="chip"><input type="checkbox" name="genres" value="thriller">Thriller</label>
+          </div>
+        </div>
+
+        <div class="prefs__group grid2">
+          <div>
+            <h2 class="prefs__title">Humeur</h2>
+            <select name="mood">
+              <option value="peu importe">Peu importe</option>
+              <option value="léger">Léger</option>
+              <option value="intense">Intense</option>
+            </select>
+          </div>
+          <div>
+            <h2 class="prefs__title">Durée</h2>
+            <select name="duration">
+              <option value="peu importe">Peu importe</option>
+              <option value="court">Court (≤ 90 min / ≤ 30 min épisode)</option>
+              <option value="moyen">Moyen (90–130 min / 30–60 min)</option>
+              <option value="long">Long (≥ 130 min / ≥ 60 min)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prefs__group grid2">
+          <div>
+            <h2 class="prefs__title">Langue (origine)</h2>
+            <select name="olang">
+              <option value="any">Peu importe</option>
+              <option value="fr">Français</option>
+              <option value="en">Anglais</option>
+              <option value="es">Espagnol</option>
+              <option value="ja">Japonais</option>
+              <option value="ko">Coréen</option>
+              <option value="de">Allemand</option>
+              <option value="it">Italien</option>
+            </select>
+          </div>
+          <div>
+            <h2 class="prefs__title">Années</h2>
+            <div class="grid2">
+              <input type="number" name="year_from" placeholder="De (ex: 2015)" min="1900" max="2100">
+              <input type="number" name="year_to" placeholder="À (ex: 2025)" min="1900" max="2100">
+            </div>
+          </div>
+        </div>
+
+        <div class="prefs__group">
+          <h2 class="prefs__title">Je n’ai que…</h2>
+          <div class="chips" role="group">
+            <button class="chip chip--btn" type="button" data-mins="20">J’ai 20 min</button>
+            <button class="chip chip--btn" type="button" data-mins="40">J’ai 40 min</button>
+            <button class="chip chip--btn" type="button" data-mins="120">J’ai 2 h+</button>
+          </div>
+        </div>
+
+        <div class="prefs__actions">
+          <button class="btn" type="submit">Trouver</button>
+          <button class="btn btn--ghost" type="button" id="shuffleBtn">Surprends-moi</button>
+          <button class="btn btn--ghost" type="button" id="resetBtn">Réinitialiser</button>
+        </div>
+
+        <p id="prefsHelp" class="muted">Les choix sont mémorisés sur cet appareil.</p>
+      </form>
+    </section>
+
+    <section class="results" aria-live="polite">
+      <h2>Suggestions</h2>
+      <div id="resultsGrid" class="grid"></div>
+      <p id="emptyMsg" class="muted" hidden>Aucun résultat — élargis les filtres.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__inner">
+      <p>© <span id="year"></span> Trouve-Moi Un Truc</p>
+      <a class="to-top" href="#">↑</a>
+    </div>
+    <div class="tmdb">
+      Ce produit utilise l’API de
+      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>
+      mais n’est ni approuvé ni certifié par TMDB.
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+const form = document.getElementById("prefsForm");
+const results = document.getElementById("results");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const type = form.elements["type"].value;
+
+  const res = await fetch(`/api/search?type=${type}`);
+  const data = await res.json();
+
+  results.innerHTML = "";
+  data.results.forEach((r) => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <img src="${r.poster || ""}" alt="${r.title}" />
+      <h3>${r.title}</h3>
+      <p>${r.type} · ${r.year} · ⭐ ${r.rating}</p>
+    `;
+    results.appendChild(div);
+  });
+});

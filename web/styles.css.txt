@@ -1,0 +1,26 @@
+body {
+  font-family: sans-serif;
+  margin: 2rem;
+  background: #0b1220;
+  color: #fff;
+}
+
+header {
+  margin-bottom: 2rem;
+}
+
+#results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: #111827;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+.card img {
+  width: 100%;
+  border-radius: 0.5rem;
+}
