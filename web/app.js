@@ -1,4 +1,5 @@
-// web/app.js — front complet sans top-level await + plateformes dynamiques FR
+// web/app.js — Favoris plateformes + FR-only client, recherche stable
+
 const $ = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
@@ -19,22 +20,50 @@ const seen = loadSet(LS_SEEN);
 // ---------------- Providers dynamiques (FR) ----------------
 let ALL_PROVIDERS = []; // {name, ids[], logo}
 
+/** Ordre exact demandé en favoris (affichés en premier) */
+const POPULAR_ORDER = [
+  "Netflix",
+  "Apple TV+",
+  "Disney+",
+  "Prime Video",
+  "Canal+",
+  "Paramount+",
+  "HBO Max" // on affichera aussi "Max" si présent dans la liste (voir plus bas)
+];
+
+/** Certains catalogues renvoient "Max" au lieu de "HBO Max" */
+function isPopularName(name) {
+  if (!name) return false;
+  if (name === "Max") return true; // traiter comme HBO
+  return POPULAR_ORDER.includes(name);
+}
+
 async function loadProvidersUI() {
+  if (!providersChips) return;
+  providersChips.innerHTML = `<span class="muted">Chargement des plateformes…</span>`;
   try {
     const res = await fetch('/api/providers-list');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     ALL_PROVIDERS = data.providers || [];
-    if (!ALL_PROVIDERS.length) throw new Error("no providers");
+    if (!ALL_PROVIDERS.length) throw new Error("Aucune plateforme reçue");
 
-    // Plateformes "populaires" affichées en premier
-    const POPULAR = ["Netflix","Prime Video","Disney+","Canal+","Paramount+","Apple TV+","OCS","TF1+","M6+","France TV"];
-    const pop = [];
-    const other = [];
+    // Sépare favoris vs autres
+    const popular = [];
+    const others = [];
     for (const p of ALL_PROVIDERS) {
-      (POPULAR.includes(p.name) ? pop : other).push(p);
+      (isPopularName(p.name) ? popular : others).push(p);
     }
-    pop.sort((a,b)=> a.name.localeCompare(b.name,'fr'));
-    other.sort((a,b)=> a.name.localeCompare(b.name,'fr'));
+
+    // Trie les favoris selon POPULAR_ORDER exact
+    popular.sort((a,b)=>{
+      const ia = POPULAR_ORDER.indexOf(a.name === "Max" ? "HBO Max" : a.name);
+      const ib = POPULAR_ORDER.indexOf(b.name === "Max" ? "HBO Max" : b.name);
+      return ia - ib;
+    });
+
+    // Trie alphabétique pour le reste
+    others.sort((a,b)=> a.name.localeCompare(b.name,'fr'));
 
     const renderChip = (p)=>`
       <label class="chip">
@@ -43,11 +72,13 @@ async function loadProvidersUI() {
       </label>`;
 
     providersChips.innerHTML = `
-      ${pop.map(renderChip).join("")}
-      <details style="margin-left:.25rem">
-        <summary class="chip" style="list-style:none;display:inline-flex;cursor:pointer">+ Plus de plateformes</summary>
+      <div class="fav-providers" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
+        ${popular.map(renderChip).join("")}
+      </div>
+      <details>
+        <summary class="chip" style="list-style:none;display:inline-flex;cursor:pointer">Autres plateformes</summary>
         <div style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.5rem">
-          ${other.map(renderChip).join("")}
+          ${others.map(renderChip).join("")}
         </div>
       </details>
     `;
@@ -55,14 +86,13 @@ async function loadProvidersUI() {
     // Ré-applique les préférences sauvegardées
     const saved = getSavedPrefs();
     if (saved?.providers?.length) {
-      $$(".chip input[name='providers']").forEach(inp => {
+      document.querySelectorAll(".chip input[name='providers']").forEach(inp => {
         inp.checked = saved.providers.includes(inp.value);
       });
     }
-  } catch {
-    if (providersChips) {
-      providersChips.innerHTML = `<span class="muted">Impossible de charger les plateformes.</span>`;
-    }
+  } catch (err) {
+    console.error("loadProvidersUI error:", err);
+    providersChips.innerHTML = `<span class="muted">Impossible de charger les plateformes.</span>`;
   }
 }
 
@@ -101,13 +131,14 @@ const providersCache = new Map(); // key: `${type}-${id}` -> {flatrate, buy, ren
 function providerDeepLink(name, title) {
   const q = encodeURIComponent(title);
   const n = (name || "").toLowerCase();
-  if (n.includes('netflix'))  return `https://www.netflix.com/search?q=${q}`;
+  if (n.includes('netflix'))   return `https://www.netflix.com/search?q=${q}`;
   if (n.includes('prime') || n.includes('amazon')) return `https://www.primevideo.com/search?phrase=${q}`;
-  if (n.includes('disney'))   return `https://www.disneyplus.com/search?q=${q}`;
-  if (n.includes('canal'))    return `https://www.canalplus.com/recherche?query=${q}`;
-  if (n.includes('paramount'))return `https://www.paramountplus.com/search/?q=${q}`;
-  if (n.includes('apple'))    return `https://tv.apple.com/fr/search?term=${q}`;
-  if (n.includes('ocs'))      return `https://www.ocs.fr/recherche?q=${q}`;
+  if (n.includes('disney'))    return `https://www.disneyplus.com/search?q=${q}`;
+  if (n.includes('canal'))     return `https://www.canalplus.com/recherche?query=${q}`;
+  if (n.includes('paramount')) return `https://www.paramountplus.com/search/?q=${q}`;
+  if (n.includes('apple'))     return `https://tv.apple.com/fr/search?term=${q}`;
+  if (n === 'max' || n.includes('hbo')) return `https://play.max.com/search?q=${q}`;
+  if (n.includes('ocs'))       return `https://www.ocs.fr/recherche?q=${q}`;
   return null;
 }
 
@@ -163,7 +194,7 @@ function render(results) {
   $$(".show-providers", grid).forEach(btn => {
     btn.addEventListener("click", () => showProviders(btn.dataset.type, btn.dataset.id, btn.closest(".card")));
   });
-  // Regarder : image / titre / bouton
+  // Regarder : image / titre / bouton / poster
   $$(".open-watch", grid).forEach(el => {
     el.addEventListener("click", () => openWatch(el.dataset.type, el.dataset.id, el.dataset.title));
   });
@@ -237,9 +268,13 @@ async function query(prefsOverride) {
   if (p.olang && p.olang !== "any") qs.set("original_language", p.olang);
   if (p.year_from) qs.set("year_from", p.year_from);
   if (p.year_to) qs.set("year_to", p.year_to);
+
   const res = await fetch(`/api/search?${qs.toString()}`);
   const data = await res.json();
   render(data.results || []);
+
+  // Astuce debug bouton : garder en mémoire les params utilisés
+  window.__lastQueryDebug = data.debug || null;
 }
 
 // Boutons rapides "J'ai X min"
@@ -265,7 +300,7 @@ $("#shuffleBtn")?.addEventListener("click", async () => {
   }
 });
 
-// --------- INIT (sans top-level await) ---------
+// --------- INIT ---------
 (function init(){
   // année footer
   const y = new Date().getFullYear();
