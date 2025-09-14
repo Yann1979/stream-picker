@@ -1,110 +1,71 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>Stream Picker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>Stream Picker — FR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/modern-css-reset/dist/reset.min.css"
+  />
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#0b0b0c;color:#f3f3f3}
-    header{padding:16px 20px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
-    main{padding:16px 20px;max-width:1100px;margin:0 auto}
-    .row{margin:12px 0}
-    .chips{display:flex;flex-wrap:wrap;gap:.5rem}
-    .chip{display:inline-flex;gap:.4rem;align-items:center;padding:.35rem .6rem;border:1px solid #333;border-radius:999px;background:#141416;font-size:.95rem}
-    .chip input{margin:0}
-    .btn{background:#3a82f7;border:none;padding:.5rem .8rem;border-radius:.6rem;color:#fff;cursor:pointer}
-    .btn--ghost{background:transparent;border:1px solid #444}
-    .mini{font-size:.9rem}
-    .muted{color:#bdbdbd}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:12px}
-    .card{background:#15161a;border:1px solid #26282e;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
-    .card__media{width:100%;aspect-ratio:2/3;object-fit:cover;background:#0f1013}
-    .card__body{padding:10px 12px}
-    .meta{color:#9aa3ad;font-size:.9rem;margin:.2rem 0 .4rem}
-    .badges{display:flex;flex-wrap:wrap;gap:.35rem;margin:.35rem 0}
-    .badge{display:inline-flex;gap:.3rem;align-items:center;border:1px solid #2a2d33;background:#191b20;border-radius:10px;padding:.15rem .45rem}
-    .card__actions{display:flex;gap:.4rem;flex-wrap:wrap;padding:10px 12px 12px}
-    .active{outline:2px solid #3a82f7}
-    footer{padding:20px;color:#a7b0bb;text-align:center;border-top:1px solid #222;margin-top:20px}
-    #errorBar{margin:.5rem 0;color:#ff6b6b}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0d12; color:#e9eef7; }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+    h1 { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+    .bar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .seg { background:#121826; border:1px solid #263043; border-radius:12px; padding:6px; display:flex; gap:6px; }
+    .seg button{ background:transparent; border:0; color:#9fb1d0; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    .seg button.active{ background:#23304a; color:#fff; }
+    select, .btn {
+      background:#121826; border:1px solid #263043; color:#e9eef7; border-radius:10px; padding:10px 12px;
+    }
+    .btn.primary { background:#2563eb; border-color:#2563eb; }
+    .providers { margin:16px 0; }
+    .fav, .more { display:flex; flex-wrap:wrap; gap:10px; }
+    .chip { display:flex; align-items:center; gap:8px; border:1px solid #263043; background:#121826; padding:6px 10px; border-radius:999px; }
+    .chip input { accent-color:#2563eb; }
+    .chip img { width:20px; height:20px; border-radius:4px; background:#1e293b; }
+    .toggle-more { background:transparent; border:0; color:#9fb1d0; text-decoration:underline; cursor:pointer; margin:6px 0 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:16px; margin:16px 0 40px; }
+    .card { background:#0e1422; border:1px solid #1b2437; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+    .card img { width:100%; aspect-ratio:2/3; object-fit:cover; background:#0a0f1a; }
+    .card .meta { padding:10px; display:flex; flex-direction:column; gap:8px; }
+    .title { font-weight:600; line-height:1.2; min-height:40px; }
+    .desc { color:#9fb1d0; font-size: 14px; max-height: 4.2em; overflow:hidden; }
+    .actions { display:flex; gap:8px; margin-top:auto; }
+    .badge { font-size:12px; color:#9fb1d0; }
+    .muted { color:#9fb1d0; }
   </style>
 </head>
 <body>
-  <header>
-    <h1 style="margin:0;font-size:1.2rem">🎬 Stream Picker</h1>
-    <button id="shuffleBtn" class="btn btn--ghost mini">Au hasard</button>
-  </header>
-
-  <main>
-    <div id="errorBar" class="error" hidden></div>
-
-    <form id="prefsForm">
-      <div class="row">
-        <label>Type :
-          <select name="type">
-            <option value="film">Film</option>
-            <option value="série">Série</option>
-          </select>
-        </label>
-        <label style="margin-left:10px">Durée :
-          <select name="duration">
-            <option value="">Toutes</option>
-            <option value="court">&lt; 60 min</option>
-            <option value="moyen">60–120 min</option>
-            <option value="long">&gt;= 120 min</option>
-          </select>
-        </label>
-        <label style="margin-left:10px">Langue originale :
-          <select name="olang">
-            <option value="any">Toutes</option>
-            <option value="fr">Français</option>
-            <option value="en">Anglais</option>
-            <option value="es">Espagnol</option>
-            <option value="ko">Coréen</option>
-            <option value="ja">Japonais</option>
-          </select>
-        </label>
-        <label style="margin-left:10px">De
-          <input type="number" name="year_from" placeholder="2000" style="width:80px">
-        </label>
-        <label>à
-          <input type="number" name="year_to" placeholder="2025" style="width:80px">
-        </label>
-        <button class="btn mini" type="submit" style="margin-left:10px">Rechercher</button>
-        <button id="resetBtn" class="btn btn--ghost mini" type="button" style="margin-left:6px">Réinitialiser</button>
-      </div>
-
-      <div class="row">
-        <div class="chips" id="providersChips">
-          <!-- rempli par app.js -->
+  <div class="wrap">
+    <header>
+      <h1>Stream Picker</h1>
+      <div class="bar">
+        <div class="seg" id="typeSeg">
+          <button data-type="movie" class="active">Films</button>
+          <button data-type="tv">Séries</button>
         </div>
+        <select id="genreSelect">
+          <option value="">Tous les genres</option>
+        </select>
+        <button id="searchBtn" class="btn primary">Trouve-moi quelque chose</button>
       </div>
+    </header>
 
-      <div class="row">
-        <div class="chips">
-          <label class="chip"><input type="checkbox" name="genres" value="28">Action</label>
-          <label class="chip"><input type="checkbox" name="genres" value="35">Comédie</label>
-          <label class="chip"><input type="checkbox" name="genres" value="18">Drame</label>
-          <label class="chip"><input type="checkbox" name="genres" value="27">Horreur</label>
-          <label class="chip"><input type="checkbox" name="genres" value="10749">Romance</label>
-          <label class="chip"><input type="checkbox" name="genres" value="14">Fantastique</label>
-          <label class="chip"><input type="checkbox" name="genres" value="878">SF</label>
-          <label class="chip"><input class="chip--btn" data-mins="30" type="button" value="J'ai 30 min"></label>
-          <label class="chip"><input class="chip--btn" data-mins="60" type="button" value="J'ai 1h"></label>
-          <label class="chip"><input class="chip--btn" data-mins="120" type="button" value="J'ai 2h+"></label>
-        </div>
-      </div>
-    </form>
+    <section class="providers">
+      <div class="muted" style="margin-bottom:6px;">Plateformes (FR)</div>
+      <div class="fav" id="favProviders"></div>
+      <button class="toggle-more" id="toggleMore">+ de plateformes</button>
+      <div class="more" id="otherProviders" style="display:none;"></div>
+    </section>
 
-    <p id="emptyMsg" class="muted">Aucun résultat pour ces filtres (essaie d’élargir).</p>
-    <section id="resultsGrid" class="grid"></section>
-  </main>
+    <div class="muted" id="debugLine"></div>
 
-  <footer>
-    © <span id="year"></span> – Stream Picker (FR)
-  </footer>
+    <section class="grid" id="results"></section>
+  </div>
 
-  <!-- cache-busting via ?v= -->
-  <script src="/app.js?v=20250914"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
